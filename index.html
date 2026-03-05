@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的工具门户</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SortableJS -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <style>
+        body { background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .glass-header { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); border-bottom: 1px solid #e2e8f0; }
+        .tool-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .tool-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        
+        .sortable-ghost { opacity: 0.4; background-color: #f1f5f9; border: 2px dashed #94a3b8; }
+        .category-drag-handle { cursor: grab; }
+        .category-drag-handle:active { cursor: grabbing; }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        html { scroll-behavior: smooth; }
+        .sidebar-transition { transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .emoji-btn.selected { background-color: #e0e7ff; border-color: #6366f1; transform: scale(1.1); }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen pb-20">
+
+    <!-- Header / Navigation -->
+    <header class="glass-header sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <button onclick="toggleSidebar()" class="md:hidden mr-2 text-slate-500 hover:text-indigo-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+                <svg class="w-7 h-7 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
+                <h1 class="font-bold text-xl tracking-tight text-slate-900 hidden sm:block">Workspace</h1>
+            </div>
+            
+            <div class="flex-1 max-w-md mx-6">
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <input type="text" id="searchInput" class="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-colors" placeholder="搜索工具...">
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 sm:gap-3">
+                <button onclick="toggleAllCategories()" class="bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 text-slate-600 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors hidden sm:flex items-center gap-1" title="一键收起/展开所有分类">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    <span>全部收起</span>
+                </button>
+                
+                <button onclick="openToolModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    <span class="hidden sm:inline">添加工具</span>
+                </button>
+
+                <!-- 重构的完美导入导出模块 -->
+                <div class="flex items-center gap-1 sm:gap-2 ml-1 sm:ml-2 pl-1 sm:pl-2 border-l border-slate-200">
+                    <input type="file" id="importFileInput" accept=".json" class="hidden" onchange="handleImportFile(event)">
+                    <button onclick="triggerImport()" class="text-slate-400 hover:text-indigo-600 transition-colors p-1.5 rounded-lg hover:bg-indigo-50" title="导入本地配置">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    </button>
+                    <button onclick="exportData()" class="text-slate-400 hover:text-indigo-600 transition-colors p-1.5 rounded-lg hover:bg-indigo-50" title="导出备份配置">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    </button>
+                    <!-- 新增：重置本地缓存按钮 -->
+                    <button onclick="resetWorkspace()" class="text-slate-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50" title="重置为出厂设置 (清除本地缓存)">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 gap-6 items-start relative">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar-transition shrink-0 hidden md:flex flex-col sticky top-22 z-10 bg-white/60 backdrop-blur rounded-2xl border border-slate-200 shadow-sm overflow-hidden" id="sidebar-container" style="height: calc(100vh - 100px);">
+            <!-- Rendered via JS -->
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 min-w-0" id="app-container">
+            <!-- Rendered via JS -->
+        </main>
+    </div>
+
+    <!-- UI: Custom Global Dialog Modal -->
+    <div id="dialogModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform scale-95 transition-all duration-200 text-center mx-4" id="dialogContent">
+            <div id="dialogIcon" class="text-5xl mb-4 leading-none">⚠️</div>
+            <h3 class="text-xl font-bold text-slate-900 mb-2" id="dialogTitle">提示</h3>
+            <p class="text-slate-600 text-sm mb-6 leading-relaxed whitespace-pre-line" id="dialogMessage"></p>
+            <div class="flex justify-center gap-3">
+                <button type="button" id="dialogCancelBtn" class="px-5 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors w-full">取消</button>
+                <button type="button" id="dialogConfirmBtn" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium shadow-sm transition-colors w-full">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add/Edit Tool -->
+    <div id="toolModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6 transform transition-all mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold text-slate-900 mb-4" id="toolModalTitle">添加新工具</h3>
+            <form id="toolForm" onsubmit="handleToolSubmit(event)">
+                <input type="hidden" id="toolId">
+                <div class="space-y-4">
+                    <div class="flex gap-6 p-1 border-b border-slate-100 pb-3">
+                        <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                            <input type="radio" name="toolType" value="remote" checked onchange="toggleToolType()" class="text-indigo-600 focus:ring-indigo-500"> 
+                            🌐 远程链接
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                            <input type="radio" name="toolType" value="local" onchange="toggleToolType()" class="text-indigo-600 focus:ring-indigo-500"> 
+                            📁 本地上传
+                        </label>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">工具名称 *</label>
+                        <input type="text" id="toolName" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                    </div>
+
+                    <div id="urlInputGroup">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">网页链接 (URL) *</label>
+                        <input type="url" id="toolUrl" required placeholder="https://..." class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                    </div>
+
+                    <div id="fileInputGroup" class="hidden">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">上传单文件 HTML 工具</label>
+                        <input type="file" id="toolFile" accept=".html" onchange="handleFileSelect(event)" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                        <p class="text-xs text-slate-400 mt-2">文件将经过加密安全保存在浏览器本地，建议大小不超过 2MB。</p>
+                        <p id="localFileStatus" class="text-xs font-medium text-emerald-600 mt-1 hidden">✅ 已缓存本地文件数据</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">所属分类</label>
+                        <select id="toolCategory" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                            <!-- Populated via JS -->
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">描述 (可选)</label>
+                        <textarea id="toolDesc" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"></textarea>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button type="button" onclick="closeModal('toolModal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-sm transition-colors">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add/Edit Category -->
+    <div id="catModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 transform transition-all mx-4">
+            <h3 class="text-lg font-bold text-slate-900 mb-4" id="catModalTitle">添加新分类</h3>
+            <form id="catForm" onsubmit="handleCatSubmit(event)">
+                <input type="hidden" id="catId">
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">分类图标</label>
+                        <div class="flex gap-4 items-center mb-3">
+                            <input type="text" id="catIconInput" value="🗂️" class="w-16 h-16 text-3xl text-center border-2 border-indigo-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all shadow-sm shrink-0" title="直接输入或粘贴Emoji">
+                            <div class="text-xs text-slate-500 space-y-1">
+                                <p>直接输入，或选择下方预设。</p>
+                                <p>快捷键调出表情：</p>
+                                <p>Win: <kbd class="bg-slate-100 border border-slate-200 px-1 rounded font-mono">Win</kbd> + <kbd class="bg-slate-100 border border-slate-200 px-1 rounded font-mono">.</kbd></p>
+                                <p>Mac: <kbd class="bg-slate-100 border border-slate-200 px-1 rounded font-mono">Cmd</kbd> + <kbd class="bg-slate-100 border border-slate-200 px-1 rounded font-mono">Space</kbd></p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-6 gap-2" id="emojiPicker">
+                            <!-- JS Populated -->
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">分类名称 *</label>
+                        <input type="text" id="catName" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-between items-center">
+                    <button type="button" id="catDeleteBtn" onclick="deleteCategoryFromModal()" class="text-sm font-medium text-red-500 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded transition-colors hidden items-center gap-1 shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        删除分类
+                    </button>
+                    <div class="flex gap-2 ml-auto">
+                        <button type="button" onclick="closeModal('catModal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">取消</button>
+                        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-sm transition-colors">保存</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 0. 核心系统逻辑：自定义弹窗引擎
+        // ==========================================
+        window.showDialog = function(options) {
+            const modal = document.getElementById('dialogModal');
+            const content = document.getElementById('dialogContent');
+            
+            document.getElementById('dialogTitle').innerText = options.title || '提示';
+            document.getElementById('dialogMessage').innerText = options.message || '';
+            document.getElementById('dialogIcon').innerText = options.icon || '⚠️';
+            
+            const cancelBtn = document.getElementById('dialogCancelBtn');
+            const confirmBtn = document.getElementById('dialogConfirmBtn');
+            
+            const newCancelBtn = cancelBtn.cloneNode(true);
+            const newConfirmBtn = confirmBtn.cloneNode(true);
+            cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+            
+            const closeDialog = () => {
+                modal.classList.add('opacity-0');
+                content.classList.add('scale-95');
+                setTimeout(() => modal.classList.add('hidden'), 200);
+            };
+
+            if (options.type === 'alert') {
+                newCancelBtn.classList.add('hidden');
+                newConfirmBtn.innerText = '我知道了';
+                newConfirmBtn.className = "px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium shadow-sm transition-colors w-full";
+                newConfirmBtn.onclick = () => { closeDialog(); if(options.onConfirm) options.onConfirm(); };
+            } else {
+                newCancelBtn.classList.remove('hidden');
+                newConfirmBtn.innerText = '确定';
+                if(options.isDanger) {
+                    newConfirmBtn.className = "px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium shadow-sm transition-colors w-full";
+                } else {
+                    newConfirmBtn.className = "px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium shadow-sm transition-colors w-full";
+                }
+                
+                newCancelBtn.onclick = () => { closeDialog(); if(options.onCancel) options.onCancel(); };
+                newConfirmBtn.onclick = () => { closeDialog(); if(options.onConfirm) options.onConfirm(); };
+            }
+            
+            modal.classList.remove('hidden');
+            void modal.offsetWidth;
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+        };
+
+        // ==========================================
+        // 1. 数据与状态管理
+        // ==========================================
+        const STORAGE_KEY = 'workspace_tools_data';
+        const EMOJIS = ['🗂️', '🌍', '💻', '📁', '🛠️', '🚀', '🎨', '📝', '🎮', '🔧', '📦', '🔒'];
+        
+        const PROTECTED_CATEGORIES = ['cat_remote', 'cat_my'];
+
+        // 💡 提示：如果你想让发布上去的工具对所有人可见，请在这里修改默认数据。
+        // ⚠️ 修复注意：默认数据里的 id 不要使用 Date.now()，请使用固定的英文字符符，如 't_hex'，以免造成渲染和拖拽的状态混乱。
+        const defaultData = {
+            sidebarCollapsed: false,
+            categories: [
+                { id: 'cat_remote', name: '远程工具', icon: '🌍', isCollapsed: false },
+                { id: 'cat_my', name: '我的', icon: '📁', isCollapsed: false }
+            ],
+            tools: [
+                { id: 't_hex', name: '报文转hex', type: 'remote', url: './hex.html', desc: '转换报文为二进制', categoryId: 'cat_remote', isStar: false },
+                { id: 't_pridata', name: '私有数据解析', type: 'remote', url: './data.html', desc: '私有数据的设备列表解析', categoryId: 'cat_remote', isStar: false },
+                { id: 't_case', name: '测试用例生成', type: 'remote', url: 'https://qacase.vercel.app/ ', desc: 'ai辅助生成测试用例', categoryId: 'cat_remote', isStar: false }
+            ]
+        };
+
+        let state = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        
+        if (!state || !state.categories || !state.tools) {
+            state = defaultData;
+        } else {
+            if (state.sidebarCollapsed === undefined) state.sidebarCollapsed = false;
+            
+            if (!state.categories.find(c => c.id === 'cat_remote')) {
+                state.categories.unshift({ id: 'cat_remote', name: '远程工具', icon: '🌍', isCollapsed: false });
+            }
+            if (!state.categories.find(c => c.id === 'cat_my')) {
+                state.categories.push({ id: 'cat_my', name: '我的', icon: '📁', isCollapsed: false });
+            }
+
+            state.categories.forEach(c => {
+                if (c.isCollapsed === undefined) c.isCollapsed = false;
+                if (!c.icon) {
+                    const emojiMatch = c.name.match(/^([\uD800-\uDBFF][\uDC00-\uDFFF]|\p{Emoji_Presentation}|\p{Extended_Pictographic})\s*/u);
+                    if (emojiMatch) {
+                        c.icon = emojiMatch[1];
+                        c.name = c.name.replace(emojiMatch[0], '').trim();
+                    } else {
+                        c.icon = '🗂️';
+                    }
+                }
+            });
+            state.tools.forEach(t => {
+                if (!t.type) t.type = 'remote';
+            });
+        }
+        saveState();
+
+        let searchQuery = '';
+        let sortableInstances = [];
+        let currentFileContent = ''; 
+
+        function saveState() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+
+        // 新增：重置本地缓存，读取最新出厂数据
+        window.resetWorkspace = function() {
+            showDialog({
+                title: '重置工作区',
+                message: '确认重置吗？\n这将会清除您在此设备上的所有个人修改和分类，完全恢复到代码里的初始默认状态。',
+                icon: '🔄',
+                isDanger: true,
+                onConfirm: () => {
+                    localStorage.removeItem(STORAGE_KEY);
+                    location.reload();
+                }
+            });
+        };
+
+        // ==========================================
+        // 2. 核心渲染逻辑
+        // ==========================================
+        const appContainer = document.getElementById('app-container');
+        const sidebarContainer = document.getElementById('sidebar-container');
+        const searchInput = document.getElementById('searchInput');
+
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag]));
+        }
+
+        function toggleSidebar() {
+            state.sidebarCollapsed = !state.sidebarCollapsed;
+            saveState();
+            render();
+        }
+
+        window.toggleAllCategories = function() {
+            const anyExpanded = state.categories.some(c => !c.isCollapsed);
+            const newState = anyExpanded ? true : false;
+            state.categories.forEach(c => c.isCollapsed = newState);
+            saveState();
+            render();
+        };
+
+        function renderSidebar() {
+            sidebarContainer.className = `sidebar-transition shrink-0 hidden md:flex flex-col sticky top-24 z-10 bg-white/60 backdrop-blur rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${state.sidebarCollapsed ? 'w-16' : 'w-56'}`;
+            
+            const isCol = state.sidebarCollapsed;
+            
+            let html = `
+                <div class="flex items-center justify-between p-3 border-b border-slate-100 shrink-0">
+                    <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 ${isCol ? 'hidden' : ''}">
+                        <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+                        导航目录
+                    </h3>
+                    <button onclick="toggleSidebar()" class="text-slate-400 hover:text-indigo-600 p-1 mx-auto transition-colors" title="${isCol ? '展开目录' : '收起目录'}">
+                        <svg class="w-5 h-5 ${isCol ? 'rotate-180' : ''} transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+                    </button>
+                </div>
+
+                <div class="shrink-0 p-2 border-b border-slate-100">
+                    ${state.tools.some(t => t.isStar) ? `
+                        <a href="#section-starred" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-amber-600 hover:bg-amber-50 hover:text-amber-700 transition-colors ${isCol ? 'justify-center px-0' : ''}" title="星标置顶">
+                            <span class="text-base shrink-0">⭐</span>
+                            ${!isCol ? `<span class="text-sm font-medium truncate">星标置顶</span>` : ''}
+                        </a>
+                    ` : `<div class="px-3 py-2 text-xs text-slate-400 text-center ${isCol ? 'hidden' : ''}">无星标内容</div>`}
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-2 min-h-0 custom-scrollbar">
+                    <ul id="sidebar-category-list" class="space-y-1">
+            `;
+
+            state.categories.forEach(cat => {
+                const isProtected = PROTECTED_CATEGORIES.includes(cat.id);
+                html += `
+                    <li data-cat-id="${cat.id}" class="group/sidelist relative rounded-lg hover:bg-indigo-50/50 transition-colors flex items-center">
+                        ${!isCol ? `<span class="category-drag-handle opacity-0 group-hover/sidelist:opacity-100 absolute left-2 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing z-10"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16"><path d="M7 2a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 5a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 8a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 11a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 14a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg></span>` : ''}
+                        
+                        <a href="#cat-${cat.id}" class="flex items-center gap-3 py-2.5 w-full ${isCol ? 'justify-center px-0' : 'pl-7 pr-3'}" title="${escapeHTML(cat.name)}">
+                            <span class="text-base shrink-0">${cat.icon}</span>
+                            ${!isCol ? `<span class="text-sm font-medium text-slate-600 truncate flex-1 group-hover/sidelist:text-indigo-600">${escapeHTML(cat.name)} ${isProtected ? '<span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded ml-1">默认</span>' : ''}</span>` : ''}
+                        </a>
+                        
+                        ${!isCol && !isProtected ? `
+                        <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-100 md:opacity-0 group-hover/sidelist:opacity-100 transition-opacity bg-gradient-to-l from-indigo-50/90 pl-4 py-1 z-10">
+                            <button onclick="editCategory(event, '${cat.id}')" class="text-slate-400 hover:text-indigo-600 p-1" title="编辑"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
+                        </div>
+                        ` : ''}
+                    </li>
+                `;
+            });
+
+            html += `
+                    </ul>
+                </div>
+
+                <div class="shrink-0 p-3 border-t border-slate-100 bg-slate-50/50">
+                    <button onclick="openCatModal()" class="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-dashed border-slate-300 text-slate-500 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 transition-colors" title="新建分类">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        ${!isCol ? `<span class="text-sm font-medium">新建分类</span>` : ''}
+                    </button>
+                </div>
+            `;
+            
+            sidebarContainer.innerHTML = html;
+        }
+
+        function generateToolCard(tool, isDraggable = true) {
+            const isLocal = tool.type === 'local';
+            const starClass = tool.isStar ? 'text-amber-400 fill-current' : 'text-slate-300 hover:text-amber-400';
+            const cursorClass = isDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer';
+            
+            const badgeHtml = isLocal
+                ? `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 border border-emerald-200 shrink-0" title="本地 HTML 工具">📁 本地</span>`
+                : `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700 border border-blue-200 shrink-0" title="外网链接">🌐 远程</span>`;
+            
+            const urlDisplay = isLocal ? '📄 本地 HTML 缓存数据' : escapeHTML(tool.url);
+
+            return `
+                <div class="tool-card bg-white border border-slate-200 rounded-xl p-4 flex flex-col h-full relative group ${cursorClass}" data-tool-id="${tool.id}" onclick="handleCardClick(event, '${tool.id}')">
+                    
+                    <button class="absolute top-4 right-4 z-10" onclick="toggleStar(event, '${tool.id}')">
+                        <svg class="w-5 h-5 ${starClass} transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                    </button>
+
+                    <div class="flex items-center gap-2 mb-2 pr-6">
+                        <h3 class="font-semibold text-slate-800 text-base truncate">${escapeHTML(tool.name)}</h3>
+                        ${badgeHtml}
+                    </div>
+                    
+                    <p class="text-sm text-slate-500 line-clamp-2 flex-1 mb-4">${escapeHTML(tool.desc || '暂无描述')}</p>
+                    
+                    <div class="border-t border-slate-100 pt-3 flex justify-between items-center mt-auto">
+                        <span class="text-xs ${isLocal ? 'text-emerald-500' : 'text-slate-400 font-mono'} truncate max-w-[140px]">${urlDisplay}</span>
+                        <div class="flex sm:hidden group-hover:flex gap-2 z-10">
+                            <button onclick="editTool(event, '${tool.id}')" class="text-slate-400 hover:text-indigo-600 transition-colors" title="编辑">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                            </button>
+                            <button onclick="deleteTool(event, '${tool.id}')" class="text-slate-400 hover:text-red-500 transition-colors" title="删除">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function render() {
+            sortableInstances.forEach(instance => instance.destroy());
+            sortableInstances = [];
+
+            renderSidebar();
+
+            let html = '';
+
+            if (searchQuery) {
+                const query = searchQuery.toLowerCase();
+                const filteredTools = state.tools.filter(t => 
+                    (t.name && t.name.toLowerCase().includes(query)) || 
+                    (t.desc && t.desc.toLowerCase().includes(query))
+                );
+
+                html += `<div class="mb-8">
+                    <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        搜索结果 (${filteredTools.length})
+                    </h2>
+                    ${filteredTools.length > 0 ? 
+                        `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">${filteredTools.map(t => generateToolCard(t, false)).join('')}</div>` : 
+                        `<div class="text-center py-12 text-slate-500">没有找到匹配的工具，换个关键词试试？</div>`
+                    }
+                </div>`;
+                appContainer.innerHTML = html;
+                return; 
+            }
+
+            const starredTools = state.tools.filter(t => t.isStar);
+            if (starredTools.length > 0) {
+                html += `
+                <div id="section-starred" class="mb-10 scroll-mt-24">
+                    <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <span class="text-xl">⭐</span>
+                        星标置顶
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        ${starredTools.map(t => generateToolCard(t, false)).join('')}
+                    </div>
+                </div>`;
+            }
+
+            html += `<div id="categories-wrapper" class="space-y-6">`;
+            state.categories.forEach(cat => {
+                const catTools = state.tools.filter(t => t.categoryId === cat.id);
+                const chevronClass = cat.isCollapsed ? '-rotate-90' : 'rotate-0';
+                const isProtected = PROTECTED_CATEGORIES.includes(cat.id);
+                
+                html += `
+                <div id="cat-${cat.id}" class="category-section bg-slate-50/80 rounded-2xl p-3 border border-slate-100 scroll-mt-24" data-category-id="${cat.id}">
+                    <div class="flex items-center justify-between px-2 mb-3 group/cat">
+                        
+                        <div class="flex items-center gap-2 flex-1">
+                            <span class="category-drag-handle text-slate-400 hover:text-slate-600 px-1 cursor-grab active:cursor-grabbing"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path></svg></span>
+                            
+                            <button onclick="toggleCategoryCollapse(event, '${cat.id}')" class="text-slate-400 hover:text-indigo-600 transition-transform duration-200 ${chevronClass} p-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+
+                            <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                                <span>${cat.icon}</span>
+                                ${escapeHTML(cat.name)} 
+                                ${isProtected ? '<span class="text-xs font-normal text-slate-400 bg-slate-200/50 px-1.5 py-0.5 rounded">默认</span>' : ''}
+                                <span class="text-sm font-normal text-slate-400 ml-1">(${catTools.length})</span>
+                            </h2>
+                            
+                            ${!isProtected ? `
+                            <div class="opacity-100 sm:opacity-0 group-hover/cat:opacity-100 flex items-center gap-2 ml-4 transition-opacity">
+                                <button onclick="editCategory(event, '${cat.id}')" class="text-xs text-slate-500 hover:text-indigo-600 px-2 py-1 bg-white rounded shadow-sm border border-slate-200">设置</button>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="tool-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 min-h-[60px] p-2 rounded-xl transition-all ${cat.isCollapsed ? 'hidden' : ''}" data-category-id="${cat.id}">
+                        ${catTools.length > 0 
+                            ? catTools.map(t => generateToolCard(t, true)).join('') 
+                            : `<div class="col-span-full h-full border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-sm text-slate-400 py-6 pointer-events-none">分类为空，拖拽工具到此处或点击右上角添加</div>`
+                        }
+                    </div>
+                </div>`;
+            });
+            html += `</div>`;
+            
+            appContainer.innerHTML = html;
+            initSortable();
+        }
+
+        // ==========================================
+        // 初始化拖拽引擎
+        // ==========================================
+        function initSortable() {
+            const sidebarList = document.getElementById('sidebar-category-list');
+            if (sidebarList) {
+                sortableInstances.push(new Sortable(sidebarList, {
+                    animation: 250,
+                    handle: '.category-drag-handle',
+                    draggable: 'li', 
+                    ghostClass: 'sortable-ghost',
+                    filter: 'button, a, input', 
+                    preventOnFilter: false,     
+                    onEnd: function () {
+                        const itemEls = sidebarList.querySelectorAll('[data-cat-id]');
+                        const newOrderIds = Array.from(itemEls).map(el => el.getAttribute('data-cat-id'));
+                        
+                        const newCats = [];
+                        newOrderIds.forEach(id => {
+                            const cat = state.categories.find(c => c.id === id);
+                            if (cat) newCats.push(cat);
+                        });
+                        state.categories = newCats;
+                        saveState();
+                        render();
+                    }
+                }));
+            }
+
+            const catWrapper = document.getElementById('categories-wrapper');
+            if (catWrapper) {
+                sortableInstances.push(new Sortable(catWrapper, {
+                    animation: 250,
+                    handle: '.category-drag-handle',
+                    draggable: '.category-section',
+                    ghostClass: 'sortable-ghost',
+                    filter: 'button',
+                    preventOnFilter: false,
+                    onEnd: function () {
+                        const itemEls = catWrapper.querySelectorAll('.category-section');
+                        const newOrderIds = Array.from(itemEls).map(el => el.getAttribute('data-category-id'));
+                        const newCats = [];
+                        newOrderIds.forEach(id => {
+                            const cat = state.categories.find(c => c.id === id);
+                            if (cat) newCats.push(cat);
+                        });
+                        state.categories = newCats;
+                        saveState();
+                        render();
+                    }
+                }));
+            }
+
+            const grids = document.querySelectorAll('.tool-grid');
+            grids.forEach(grid => {
+                sortableInstances.push(new Sortable(grid, {
+                    group: 'shared-tools',
+                    animation: 250,
+                    ghostClass: 'sortable-ghost',
+                    draggable: '.tool-card',
+                    filter: 'button, a', 
+                    preventOnFilter: false,              
+                    onEnd: function() {
+                        const catNodes = document.querySelectorAll('.category-section');
+                        const newTools = [];
+                        
+                        catNodes.forEach(node => {
+                            const catId = node.getAttribute('data-category-id');
+                            const toolNodes = node.querySelectorAll('.tool-grid .tool-card'); 
+                            
+                            toolNodes.forEach(tNode => {
+                                const toolId = tNode.getAttribute('data-tool-id');
+                                const tool = state.tools.find(t => t.id === toolId);
+                                if (tool) {
+                                    tool.categoryId = catId;
+                                    newTools.push(tool);
+                                }
+                            });
+                        });
+
+                        const capturedIds = new Set(newTools.map(t => t.id));
+                        state.tools.forEach(t => {
+                            if (!capturedIds.has(t.id)) newTools.push(t);
+                        });
+
+                        state.tools = newTools;
+                        saveState();
+                        render();
+                    }
+                }));
+            });
+        }
+
+        // ==========================================
+        // 3. 交互事件处理
+        // ==========================================
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value.trim();
+            render();
+        });
+
+        window.handleCardClick = function(e, toolId) {
+            if (e.target.closest('button')) return; 
+            
+            const tool = state.tools.find(t => t.id === toolId);
+            if (!tool) return;
+
+            if (tool.type === 'local') {
+                if (!tool.content) {
+                    showDialog({ type: 'alert', title: '无法打开', message: '该本地工具的内容为空或已被清理。\n建议重新编辑上传。', icon: '💔' });
+                    return;
+                }
+                const blob = new Blob([tool.content], { type: 'text/html;charset=utf-8' });
+                const blobUrl = URL.createObjectURL(blob);
+                window.open(blobUrl, '_blank');
+            } else {
+                window.open(tool.url, '_blank');
+            }
+        };
+
+        window.toggleStar = function(e, id) {
+            e.stopPropagation();
+            const tool = state.tools.find(t => t.id === id);
+            if (tool) {
+                tool.isStar = !tool.isStar;
+                saveState();
+                render();
+            }
+        };
+
+        window.toggleCategoryCollapse = function(e, id) {
+            e.stopPropagation();
+            const cat = state.categories.find(c => c.id === id);
+            if (cat) {
+                cat.isCollapsed = !cat.isCollapsed;
+                saveState();
+                render();
+            }
+        };
+
+        // ==========================================
+        // 分类操作
+        // ==========================================
+        function initEmojiPicker() {
+            const container = document.getElementById('emojiPicker');
+            container.innerHTML = EMOJIS.map(e => `
+                <button type="button" class="emoji-btn text-xl p-1.5 rounded-lg border border-transparent hover:bg-slate-100 transition-all text-center" onclick="selectEmoji('${e}', this)">${e}</button>
+            `).join('');
+
+            document.getElementById('catIconInput').addEventListener('input', function() {
+                document.querySelectorAll('.emoji-btn').forEach(btn => btn.classList.remove('selected', 'bg-indigo-50', 'border-indigo-300'));
+            });
+        }
+        initEmojiPicker();
+
+        window.selectEmoji = function(emoji, btnElement) {
+            document.getElementById('catIconInput').value = emoji;
+            document.querySelectorAll('.emoji-btn').forEach(btn => btn.classList.remove('selected', 'bg-indigo-50', 'border-indigo-300'));
+            if(btnElement) btnElement.classList.add('selected', 'bg-indigo-50', 'border-indigo-300');
+        };
+
+        window.openCatModal = function(cat = null) {
+            if (cat && PROTECTED_CATEGORIES.includes(cat.id)) {
+                showDialog({ type: 'alert', title: '操作被拦截', message: '系统默认分类受保护，不可编辑！', icon: '🛡️' });
+                return;
+            }
+
+            if (cat) {
+                document.getElementById('catModalTitle').innerText = '编辑分类';
+                document.getElementById('catId').value = cat.id;
+                document.getElementById('catName').value = cat.name;
+                document.getElementById('catIconInput').value = cat.icon || '🗂️';
+                
+                const deleteBtn = document.getElementById('catDeleteBtn');
+                deleteBtn.classList.remove('hidden');
+                deleteBtn.classList.add('flex');
+            } else {
+                document.getElementById('catModalTitle').innerText = '添加新分类';
+                document.getElementById('catForm').reset();
+                document.getElementById('catId').value = '';
+                document.getElementById('catIconInput').value = '🗂️';
+                
+                const deleteBtn = document.getElementById('catDeleteBtn');
+                deleteBtn.classList.add('hidden');
+                deleteBtn.classList.remove('flex');
+            }
+
+            const currentIcon = document.getElementById('catIconInput').value;
+            const emojiBtns = document.querySelectorAll('.emoji-btn');
+            emojiBtns.forEach(btn => {
+                btn.classList.remove('selected', 'bg-indigo-50', 'border-indigo-300');
+                if(btn.innerText === currentIcon) btn.classList.add('selected', 'bg-indigo-50', 'border-indigo-300');
+            });
+
+            document.getElementById('catModal').classList.remove('hidden');
+        };
+
+        window.handleCatSubmit = function(e) {
+            e.preventDefault();
+            const id = document.getElementById('catId').value;
+            const newCat = {
+                id: id || 'cat_' + Date.now(),
+                name: document.getElementById('catName').value.trim(),
+                icon: document.getElementById('catIconInput').value,
+                isCollapsed: id ? state.categories.find(c => c.id === id).isCollapsed : false
+            };
+
+            if (id) {
+                const idx = state.categories.findIndex(c => c.id === id);
+                if (idx !== -1) state.categories[idx] = newCat;
+            } else {
+                state.categories.push(newCat);
+            }
+
+            saveState();
+            closeModal('catModal');
+            render();
+        };
+
+        window.editCategory = function(e, id) {
+            if(e) { e.preventDefault(); e.stopPropagation(); }
+            if (PROTECTED_CATEGORIES.includes(id)) {
+                showDialog({ type: 'alert', title: '操作被拦截', message: '系统默认分类不可编辑！', icon: '🛡️' });
+                return;
+            }
+            const cat = state.categories.find(c => c.id === id);
+            if (cat) openCatModal(cat);
+        };
+
+        window.deleteCategoryFromModal = function() {
+            const id = document.getElementById('catId').value;
+            if (!id) return;
+            
+            if (PROTECTED_CATEGORIES.includes(id)) {
+                showDialog({ type: 'alert', title: '操作被拦截', message: '系统默认分类受保护，不可删除！', icon: '🛡️' });
+                return;
+            }
+            
+            const toolsCount = state.tools.filter(t => t.categoryId === id).length;
+            
+            const doDelete = () => {
+                state.categories = state.categories.filter(c => c.id !== id);
+                state.tools = state.tools.filter(t => t.categoryId !== id);
+                saveState();
+                closeModal('catModal');
+                render();
+            };
+
+            if (toolsCount > 0) {
+                showDialog({
+                    title: '确认删除分类',
+                    message: `该分类下有 ${toolsCount} 个工具，删除分类会同时永久移除它们。\n请确认是否继续？`,
+                    icon: '🗑️',
+                    isDanger: true,
+                    onConfirm: doDelete
+                });
+            } else {
+                showDialog({
+                    title: '确认删除',
+                    message: '您即将删除这个空分类，确认执行吗？',
+                    icon: '🗑️',
+                    isDanger: true,
+                    onConfirm: doDelete
+                });
+            }
+        };
+
+        // ==========================================
+        // 工具模态框及文件上传逻辑
+        // ==========================================
+        window.toggleToolType = function() {
+            const type = document.querySelector('input[name="toolType"]:checked').value;
+            const urlGroup = document.getElementById('urlInputGroup');
+            const fileGroup = document.getElementById('fileInputGroup');
+            const urlInput = document.getElementById('toolUrl');
+            const fileInput = document.getElementById('toolFile');
+            const catSelect = document.getElementById('toolCategory');
+
+            if (type === 'remote') {
+                urlGroup.classList.remove('hidden');
+                fileGroup.classList.add('hidden');
+                urlInput.required = true;
+                fileInput.required = false;
+            } else {
+                urlGroup.classList.add('hidden');
+                fileGroup.classList.remove('hidden');
+                urlInput.required = false;
+                
+                const isEditing = !!document.getElementById('toolId').value;
+                fileInput.required = !isEditing && !currentFileContent;
+
+                if (!isEditing) {
+                    let myCat = state.categories.find(c => c.id === 'cat_my');
+                    if(myCat) catSelect.value = myCat.id;
+                }
+            }
+        };
+
+        window.handleFileSelect = function(e) {
+            const file = e.target.files[0];
+            const statusLabel = document.getElementById('localFileStatus');
+            
+            if (!file) {
+                currentFileContent = '';
+                statusLabel.classList.add('hidden');
+                return;
+            }
+
+            if (file.size > 2 * 1024 * 1024) { 
+                showDialog({ 
+                    type: 'alert', 
+                    title: '文件过大', 
+                    message: '⚠️ 文件体积超过 2MB！\n浏览器的本地存储（LocalStorage）通常有 5MB 上限，请谨慎保存过大文件以防缓存爆满！', 
+                    icon: '💽' 
+                });
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                currentFileContent = evt.target.result;
+                statusLabel.classList.remove('hidden');
+            };
+            reader.readAsText(file);
+        };
+
+        window.openToolModal = function(tool = null) {
+            if (state.categories.length === 0) {
+                showDialog({ type: 'alert', title: '无法操作', message: '请先在左侧目录创建一个分类！', icon: '📝' });
+                return;
+            }
+
+            const select = document.getElementById('toolCategory');
+            select.innerHTML = state.categories.map(c => `<option value="${c.id}">${c.icon} ${escapeHTML(c.name)}</option>`).join('');
+            
+            currentFileContent = ''; 
+            document.getElementById('localFileStatus').classList.add('hidden');
+            document.getElementById('toolFile').value = '';
+
+            if (tool) {
+                document.getElementById('toolModalTitle').innerText = '编辑工具';
+                document.getElementById('toolId').value = tool.id;
+                document.getElementById('toolName').value = tool.name;
+                document.getElementById('toolDesc').value = tool.desc || '';
+                document.getElementById('toolCategory').value = tool.categoryId;
+
+                if (tool.type === 'local') {
+                    document.querySelector('input[name="toolType"][value="local"]').checked = true;
+                    currentFileContent = tool.content || '';
+                    if(currentFileContent) document.getElementById('localFileStatus').classList.remove('hidden');
+                } else {
+                    document.querySelector('input[name="toolType"][value="remote"]').checked = true;
+                    document.getElementById('toolUrl').value = tool.url || '';
+                }
+            } else {
+                document.getElementById('toolModalTitle').innerText = '添加新工具';
+                document.getElementById('toolForm').reset();
+                document.getElementById('toolId').value = '';
+                document.getElementById('toolCategory').value = state.categories[0].id;
+                document.querySelector('input[name="toolType"][value="remote"]').checked = true;
+            }
+            
+            toggleToolType();
+            document.getElementById('toolModal').classList.remove('hidden');
+        };
+
+        window.closeModal = function(id) {
+            document.getElementById(id).classList.add('hidden');
+        };
+
+        window.handleToolSubmit = function(e) {
+            e.preventDefault();
+            const id = document.getElementById('toolId').value;
+            const type = document.querySelector('input[name="toolType"]:checked').value;
+            
+            const newTool = {
+                id: id || 't_' + Date.now(),
+                name: document.getElementById('toolName').value.trim(),
+                type: type,
+                categoryId: document.getElementById('toolCategory').value,
+                desc: document.getElementById('toolDesc').value.trim(),
+                isStar: id ? state.tools.find(t => t.id === id).isStar : false
+            };
+
+            if (type === 'remote') {
+                newTool.url = document.getElementById('toolUrl').value.trim();
+            } else {
+                if (!currentFileContent && !id) {
+                    showDialog({ type: 'alert', title: '缺少文件', message: '请先选择一个 HTML 文件上传！', icon: '📁' });
+                    return;
+                }
+                if (id && !currentFileContent) {
+                    newTool.content = state.tools.find(t => t.id === id).content;
+                } else {
+                    newTool.content = currentFileContent;
+                }
+            }
+
+            try {
+                if (id) {
+                    const idx = state.tools.findIndex(t => t.id === id);
+                    if (idx !== -1) state.tools[idx] = newTool;
+                } else {
+                    state.tools.push(newTool);
+                }
+                saveState();
+                closeModal('toolModal');
+                render();
+            } catch (error) {
+                if (error.name === 'QuotaExceededError') {
+                    showDialog({ 
+                        type: 'alert', 
+                        title: '存储空间不足', 
+                        message: '保存失败：浏览器本地存储空间已满。\n您上传的文件可能过大，建议清理其它占用或改用公网链接。', 
+                        icon: '❌' 
+                    });
+                    state = JSON.parse(localStorage.getItem(STORAGE_KEY)); 
+                } else {
+                    console.error(error);
+                }
+            }
+        };
+
+        window.editTool = function(e, id) {
+            e.stopPropagation();
+            const tool = state.tools.find(t => t.id === id);
+            if (tool) openToolModal(tool);
+        };
+
+        window.deleteTool = function(e, id) {
+            e.stopPropagation();
+            showDialog({
+                title: '移除工具',
+                message: '确定要从工作区中移除这个工具吗？',
+                icon: '✂️',
+                isDanger: true,
+                onConfirm: () => {
+                    state.tools = state.tools.filter(t => t.id !== id);
+                    saveState();
+                    render();
+                }
+            });
+        };
+
+        // ==========================================
+        // 导入导出模块：真正的本地文件级处理
+        // ==========================================
+        window.exportData = async function() {
+            const dataStr = JSON.stringify(state, null, 2);
+            const defaultFilename = `workspace_backup_${new Date().toISOString().slice(0,10)}.json`;
+
+            // 在 iframe 或受限环境中，抛弃 showSaveFilePicker
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = defaultFilename;
+            
+            // 必须将 a 标签加入 DOM 才能在某些浏览器中生效
+            document.body.appendChild(a); 
+            a.click();
+            
+            // 清理
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showDialog({
+                type: 'alert',
+                title: '导出成功',
+                message: '您的工作区配置已安全下载为 JSON 文件。\n如果包含大量本地 HTML 文件，请妥善保管该备份。',
+                icon: '📦'
+            });
+        };
+
+        window.triggerImport = function() {
+            document.getElementById('importFileInput').click();
+        };
+
+        window.handleImportFile = function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const parsed = JSON.parse(evt.target.result);
+                    if (!parsed.categories || !parsed.tools) throw new Error("结构不符合规范");
+                    
+                    showDialog({
+                        title: '确认导入配置',
+                        message: `成功读取配置！该备份中包含 ${parsed.tools.length} 个工具。\n导入将覆盖您当前工作区的所有内容，是否继续？`,
+                        icon: '⚠️',
+                        isDanger: true,
+                        onConfirm: () => {
+                            state = parsed;
+                            // 导入后进行系统级分类的安全校验
+                            if (!state.categories.find(c => c.id === 'cat_remote')) {
+                                state.categories.unshift({ id: 'cat_remote', name: '远程工具', icon: '🌍', isCollapsed: false });
+                            }
+                            if (!state.categories.find(c => c.id === 'cat_my')) {
+                                state.categories.push({ id: 'cat_my', name: '我的', icon: '📁', isCollapsed: false });
+                            }
+                            saveState();
+                            render();
+                            showDialog({ type: 'alert', title: '导入成功', message: '欢迎回来！工作区已为您重置到备份状态。', icon: '✅' });
+                        }
+                    });
+                } catch (err) {
+                    showDialog({ type: 'alert', title: '解析失败', message: '无法读取该文件。请确保您导入的是由本系统导出的完整 JSON 备份文件。', icon: '❌' });
+                }
+                e.target.value = ''; // 允许二次选中同一个文件
+            };
+            reader.readAsText(file);
+        };
+
+        render();
+    </script>
+</body>
+</html>

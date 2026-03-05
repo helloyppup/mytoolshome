@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hex Editor & Diff</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        .drag-active { border-color: #60a5fa !important; background-color: rgba(30, 58, 138, 0.2) !important; }
+        input[type="text"]:focus { outline: none; }
+        
+        .diff-row { animation: highlight-pulse 2s infinite; }
+        @keyframes highlight-pulse {
+            0% { background-color: rgba(153, 27, 27, 0.3); }
+            50% { background-color: rgba(153, 27, 27, 0.5); }
+            100% { background-color: rgba(153, 27, 27, 0.3); }
+        }
+        .bit-diff { 
+            color: #ef4444; 
+            font-weight: 800;
+            text-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+            background-color: rgba(239, 68, 68, 0.1);
+            padding: 0 1px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen p-4 md:p-8 flex flex-col items-center">
+
+    <div class="max-w-6xl w-full space-y-6">
+        
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-700 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-blue-400 tracking-tight">Hex Editor & Diff <span class="text-yellow-500 text-sm font-normal ml-2">Pro</span></h1>
+                <p class="text-gray-400 text-sm mt-1">支持 Hex 与 Binary 双向实时编辑</p>
+            </div>
+            <div class="mt-4 md:mt-0 flex gap-2">
+                <button onclick="downloadBin()" class="text-xs bg-gray-800 hover:bg-green-900/50 text-green-300 px-3 py-1.5 rounded transition flex items-center gap-1 border border-gray-700">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    导出 .bin
+                </button>
+                <button onclick="loadDemo()" class="text-xs bg-gray-800 hover:bg-gray-700 text-blue-300 px-3 py-1.5 rounded transition border border-gray-700">
+                    加载示例
+                </button>
+                <button onclick="clearAll()" class="text-xs bg-gray-800 hover:bg-red-900/50 text-red-300 px-3 py-1.5 rounded transition border border-gray-700">
+                    清空
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left Column -->
+            <div class="lg:col-span-5 space-y-6">
+                <!-- Drop Zone -->
+                <div id="dropZone" class="bg-gray-800 rounded-lg p-4 shadow-lg border-2 border-dashed border-gray-700 transition-all duration-200 relative group">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-bold text-blue-400">主数据源 (Hex/Drop File)</label>
+                        <span id="fileInfo" class="text-xs text-yellow-500 hidden">已加载文件</span>
+                    </div>
+                    <textarea id="hexInput" 
+                        class="w-full h-32 bg-gray-900 border border-gray-600 rounded p-3 font-mono text-sm text-green-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition resize-y"
+                        placeholder="在此粘贴 Hex 数据，或直接拖入文件..."
+                        spellcheck="false"></textarea>
+                    <div id="dragOverlay" class="absolute inset-0 bg-gray-800/95 flex items-center justify-center z-20 pointer-events-none hidden rounded-lg">
+                        <p class="text-blue-400 font-bold text-xl animate-pulse">松开加载文件</p>
+                    </div>
+                    <div class="flex justify-between items-center mt-2 text-xs text-gray-500">
+                        <span id="statusMsg">就绪</span>
+                        <span id="byteCount">0 字节</span>
+                    </div>
+                </div>
+
+                <!-- Diff Tool -->
+                <div class="bg-gray-800 rounded-lg p-4 shadow-lg border border-gray-700">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-bold text-purple-400 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                            数据比对 (Diff Tool)
+                        </label>
+                        <span id="diffStats" class="text-xs bg-gray-700 px-2 py-1 rounded text-gray-300 hidden">无差异</span>
+                    </div>
+                    <textarea id="diffInput" 
+                        class="w-full h-24 bg-gray-900 border border-gray-600 rounded p-3 font-mono text-xs text-purple-300 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition resize-y placeholder-gray-700"
+                        placeholder="粘贴数据以比对..."
+                        spellcheck="false"></textarea>
+                    <div class="mt-2 flex justify-end">
+                         <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="autoDiffCheck" class="sr-only peer" checked>
+                            <div class="relative w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:bg-purple-600 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                            <span class="ms-2 text-xs font-medium text-gray-400">自动实时比对</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Binary Stream -->
+                <div class="bg-gray-800 rounded-lg p-4 shadow-lg border border-gray-700">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-sm font-bold text-yellow-500">二进制流编辑器</h3>
+                        <button onclick="formatBinary()" class="text-xs text-gray-400 hover:text-white">格式化</button>
+                    </div>
+                    <textarea id="binaryInput" 
+                        class="w-full h-48 bg-gray-900 p-3 rounded border border-gray-600 font-mono text-xs text-yellow-500 break-all leading-relaxed focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition resize-y"
+                        placeholder="在此直接编辑 0101..."
+                        spellcheck="false"></textarea>
+                </div>
+            </div>
+
+            <!-- Right Column: Table -->
+            <div class="lg:col-span-7">
+                <div id="resultContainer" class="bg-gray-800 rounded-lg shadow-lg border border-gray-700 overflow-hidden h-full flex flex-col">
+                    <div class="p-3 bg-gray-750 border-b border-gray-700 flex justify-between items-center bg-gray-800/50 flex-shrink-0">
+                        <h2 class="font-semibold text-gray-300">详细字节编辑器</h2>
+                        <div class="flex gap-2">
+                            <span class="text-xs text-gray-500 self-center mr-2">Tip: 点击 Hex 或 Binary 修改</span>
+                            <button onclick="copyTableText()" class="text-xs text-blue-400 hover:text-blue-300 transition">复制表格</button>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-auto flex-grow bg-gray-900 relative" style="max-height: 800px;">
+                        <table class="w-full text-left border-collapse relative">
+                            <thead class="sticky top-0 bg-gray-800 shadow-sm z-10 text-xs uppercase tracking-wider text-gray-400">
+                                <tr>
+                                    <th class="p-2 border-b border-gray-600 w-12 text-center bg-gray-800">#</th>
+                                    <th class="p-2 border-b border-gray-600 w-20 bg-gray-800">Hex</th>
+                                    <th class="p-2 border-b border-gray-600 bg-gray-800">Binary (Click to Edit)</th>
+                                    <th class="p-2 border-b border-gray-600 w-16 bg-gray-800">Dec</th>
+                                    <th class="p-2 border-b border-gray-600 w-12 bg-gray-800">Char</th>
+                                    <th class="p-2 border-b border-gray-600 w-24 bg-gray-800">Visual</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analysisTableBody" class="font-mono text-sm divide-y divide-gray-800">
+                                <tr id="tableEmptyState">
+                                    <td colspan="6" class="p-8 text-center text-gray-600">暂无数据</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Elements ---
+        const hexInput = document.getElementById('hexInput');
+        const binaryInput = document.getElementById('binaryInput');
+        const diffInput = document.getElementById('diffInput');
+        const tableBody = document.getElementById('analysisTableBody');
+        const byteCountLabel = document.getElementById('byteCount');
+        const statusMsg = document.getElementById('statusMsg');
+        const diffStats = document.getElementById('diffStats');
+        const autoDiffCheck = document.getElementById('autoDiffCheck');
+        const dropZone = document.getElementById('dropZone');
+        const dragOverlay = document.getElementById('dragOverlay');
+        const fileInfo = document.getElementById('fileInfo');
+
+        // --- State ---
+        let currentBytes = [];
+        let diffBytes = null;
+        let isUpdating = false;
+        const RENDER_LIMIT = 1024;
+
+        // --- Event Listeners ---
+        hexInput.addEventListener('input', () => { if (!isUpdating) parseAndSync('hex'); });
+        binaryInput.addEventListener('input', () => { if (!isUpdating) parseAndSync('binary'); });
+        diffInput.addEventListener('input', () => { if (autoDiffCheck.checked) runDiff(); });
+        autoDiffCheck.addEventListener('change', () => { autoDiffCheck.checked ? runDiff() : clearDiff(); });
+
+        // --- Core Logic ---
+        function parseAndSync(source) {
+            isUpdating = true;
+            let bytes = [];
+            try {
+                if (source === 'hex') {
+                    const cleanHex = hexInput.value.replace(/0x/gi, '').replace(/[^0-9A-Fa-f]/g, '');
+                    for (let i = 0; i < cleanHex.length; i += 2) {
+                        const byteStr = cleanHex.substring(i, i + 2);
+                        bytes.push(parseInt(byteStr.padEnd(2, '0'), 16));
+                    }
+                } else if (source === 'binary') {
+                    const cleanBin = binaryInput.value.replace(/[^01]/g, '');
+                    for (let i = 0; i < cleanBin.length; i += 8) {
+                        const chunk = cleanBin.substring(i, Math.min(i + 8, cleanBin.length));
+                        bytes.push(parseInt(chunk.padEnd(8, '0'), 2));
+                    }
+                }
+                currentBytes = bytes;
+
+                if (source !== 'hex') updateHexInputDisplay();
+                if (source !== 'binary') updateBinaryInputDisplay();
+                if (source !== 'table') renderTable(); // Full re-render if external source
+
+                updateStats();
+                if (autoDiffCheck.checked && diffInput.value.trim()) runDiff(false);
+            } catch (e) { console.error(e); } 
+            finally { isUpdating = false; }
+        }
+
+        function updateHexInputDisplay() {
+            hexInput.value = currentBytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        }
+        function updateBinaryInputDisplay() {
+            binaryInput.value = currentBytes.map(b => b.toString(2).padStart(8, '0')).join(' ');
+        }
+        function updateStats() {
+            byteCountLabel.innerText = `${currentBytes.length} 字节`;
+            statusMsg.innerText = "格式有效";
+            statusMsg.className = "text-green-500";
+        }
+
+        // --- Table Render ---
+        function renderTable() {
+            tableBody.innerHTML = '';
+            if (currentBytes.length === 0) {
+                tableBody.innerHTML = `<tr id="tableEmptyState"><td colspan="6" class="p-8 text-center text-gray-600">暂无数据</td></tr>`;
+                return;
+            }
+
+            const limit = Math.min(currentBytes.length, RENDER_LIMIT);
+            for (let i = 0; i < limit; i++) {
+                const byteVal = currentBytes[i];
+                const tr = document.createElement('tr');
+                tr.className = `group hover:bg-gray-800 transition duration-150 border-b border-gray-800/50`;
+                tr.dataset.index = i;
+
+                // Values
+                const hexVal = byteVal.toString(16).padStart(2, '0').toUpperCase();
+                const binStr = byteVal.toString(2).padStart(8, '0');
+                const prettyBin = binStr.slice(0, 4) + ' ' + binStr.slice(4);
+                let charVal = '.';
+                if (byteVal >= 32 && byteVal <= 126) charVal = String.fromCharCode(byteVal);
+                const percent = (byteVal / 255) * 100;
+                const barColor = (byteVal === 0 ? 'bg-gray-700' : 'bg-blue-500');
+
+                tr.innerHTML = `
+                    <td class="p-2 text-gray-500 text-center text-xs">${i}</td>
+                    <td class="p-2 font-bold">
+                        <input type="text" maxlength="2" id="input-hex-${i}"
+                            class="bg-transparent text-green-400 w-8 text-center border-b border-transparent focus:border-blue-500 hover:border-gray-600 transition uppercase"
+                            value="${hexVal}" onfocus="this.select()" oninput="handleTableHexEdit(${i}, this)" onkeydown="nav(event, ${i}, 'hex')">
+                    </td>
+                    <td class="p-2 text-xs tracking-wider font-mono cursor-pointer hover:bg-gray-700/50 rounded transition px-2" 
+                        id="td-bin-${i}" onclick="enableBinaryEdit(event, ${i})">
+                        <span class="text-yellow-500/80 pointer-events-none">${prettyBin}</span>
+                    </td>
+                    <td class="p-2 text-gray-400 text-xs" id="td-dec-${i}">${byteVal}</td>
+                    <td class="p-2 text-blue-300 font-bold text-center" id="td-char-${i}">${charVal}</td>
+                    <td class="p-2 align-middle"><div class="h-1.5 w-full bg-gray-800 rounded-full overflow-hidden"><div class="${barColor} h-full transition-all duration-300" style="width: ${percent}%" id="td-bar-${i}"></div></div></td>
+                `;
+                tableBody.appendChild(tr);
+            }
+            if (currentBytes.length > RENDER_LIMIT) {
+                tableBody.insertAdjacentHTML('beforeend', `<tr><td colspan="6" class="p-4 text-center text-gray-500 italic">... 仅显示前 ${RENDER_LIMIT} 字节 ...</td></tr>`);
+            }
+        }
+
+        // --- Table Editing Logic ---
+        
+        // 1. Hex Editing
+        window.handleTableHexEdit = function(index, input) {
+            let val = input.value;
+            if (!/^[0-9A-Fa-f]{0,2}$/.test(val)) { input.classList.add('text-red-500'); return; }
+            input.classList.remove('text-red-500');
+            if (val === '') return;
+
+            const newVal = parseInt(val, 16);
+            if (!isNaN(newVal)) {
+                currentBytes[index] = newVal;
+                // Update views EXCEPT Hex (self)
+                updateRowViews(index, newVal, 'hex');
+                triggerGlobalSync();
+            }
+        };
+
+        // 2. Binary Editing (Switch to Input)
+        window.enableBinaryEdit = function(e, index) {
+            const cell = document.getElementById(`td-bin-${index}`);
+            // Prevent if already editing (has input)
+            if (cell.querySelector('input')) return;
+
+            const currentVal = currentBytes[index];
+            const binStr = currentVal.toString(2).padStart(8, '0'); // No spaces for editing
+
+            // Save old HTML to restore if cancelled (optional, we usually just re-render)
+            cell.innerHTML = `
+                <input type="text" maxlength="8" class="bg-gray-800 text-yellow-400 w-24 text-center font-mono focus:outline-none focus:ring-1 focus:ring-yellow-500 rounded px-1"
+                value="${binStr}" 
+                onblur="finishBinaryEdit(${index})" 
+                oninput="handleTableBinInput(${index}, this)"
+                onkeydown="handleBinKey(event, ${index})"
+                >`;
+            
+            const input = cell.querySelector('input');
+            input.focus();
+            input.select();
+        };
+
+        window.handleTableBinInput = function(index, input) {
+            let val = input.value;
+            // Validate: only 0 or 1
+            if (!/^[01]*$/.test(val)) { input.classList.add('text-red-500'); return; }
+            input.classList.remove('text-red-500');
+            
+            // Allow partial typing, parse what we have (padded 0 at start implicitly by parseInt)
+            // Actually usually we padEnd or let user finish. Let's parse as is.
+            if (val === '') return;
+            
+            const newVal = parseInt(val, 2);
+            // Cap at 255
+            if (newVal > 255) return; 
+
+            currentBytes[index] = newVal;
+            // Update views EXCEPT Binary (self)
+            updateRowViews(index, newVal, 'bin');
+            triggerGlobalSync();
+        };
+
+        window.finishBinaryEdit = function(index) {
+            // Re-render the cell to show formatted/diff view
+            // We can just call runDiff() which refreshes the cell content if diff active, 
+            // OR manually restore. Simplest is to re-run diff logic if active, or just basic text.
+            
+            const byteVal = currentBytes[index];
+            const binStr = byteVal.toString(2).padStart(8, '0');
+            const prettyBin = binStr.slice(0, 4) + ' ' + binStr.slice(4);
+            
+            const cell = document.getElementById(`td-bin-${index}`);
+            // Check if diff is active, if so runDiff will handle coloring
+            if (autoDiffCheck.checked && diffBytes) {
+                checkRowDiff(index); // This re-renders innerHTML with colors
+            } else {
+                cell.innerHTML = `<span class="text-yellow-500/80 pointer-events-none">${prettyBin}</span>`;
+            }
+        };
+
+        window.handleBinKey = function(e, index) {
+            if (e.key === 'Enter') { e.target.blur(); } // Finish edit
+        };
+
+        // Shared View Updater
+        function updateRowViews(index, newVal, source) {
+            // Update Hex Input (if source != hex)
+            if (source !== 'hex') {
+                const hexInput = document.getElementById(`input-hex-${index}`);
+                if (hexInput) hexInput.value = newVal.toString(16).padStart(2, '0').toUpperCase();
+            }
+            
+            // Update Binary Text (if source != bin) - Only if NOT in edit mode
+            if (source !== 'bin') {
+                const binCell = document.getElementById(`td-bin-${index}`);
+                // Only update if it does NOT contain an input
+                if (binCell && !binCell.querySelector('input')) {
+                     // If Diff is active, runDiff handles content. If not, simple text.
+                     if (!diffBytes) {
+                        const binStr = newVal.toString(2).padStart(8, '0');
+                        binCell.innerHTML = `<span class="text-yellow-500/80 pointer-events-none">${binStr.slice(0, 4) + ' ' + binStr.slice(4)}</span>`;
+                     } else {
+                         checkRowDiff(index);
+                     }
+                }
+            }
+
+            // Update Dec, Char, Bar
+            document.getElementById(`td-dec-${index}`).innerText = newVal;
+            let charVal = '.';
+            if (newVal >= 32 && newVal <= 126) charVal = String.fromCharCode(newVal);
+            document.getElementById(`td-char-${index}`).innerText = charVal;
+            
+            // Update Bar Color (if not diffing)
+            const bar = document.getElementById(`td-bar-${index}`);
+            if (!diffBytes) {
+                bar.className = (newVal === 0 ? 'bg-gray-700' : 'bg-blue-500') + " h-full transition-all duration-300";
+            }
+            bar.style.width = `${(newVal / 255) * 100}%`;
+        }
+        
+        function triggerGlobalSync() {
+            // Debounce global text area updates? For now simple flag
+            isUpdating = true;
+            updateHexInputDisplay();
+            updateBinaryInputDisplay();
+            updateStats();
+            isUpdating = false;
+        }
+
+        // --- Diff Logic ---
+        function runDiff(reparseInput = true) {
+            if (reparseInput) {
+                const rawDiff = diffInput.value;
+                if (!rawDiff.trim()) { clearDiff(); return; }
+                const cleanSpace = rawDiff.replace(/\s/g, '');
+                const isBinary = /^[01]+$/.test(cleanSpace) && cleanSpace.length > 8;
+                diffBytes = [];
+                if (isBinary) {
+                    for (let i = 0; i < cleanSpace.length; i += 8) diffBytes.push(parseInt(cleanSpace.substr(i, 8).padEnd(8,'0'), 2));
+                } else {
+                    const cleanHex = rawDiff.replace(/0x/gi, '').replace(/[^0-9A-Fa-f]/g, '');
+                    for (let i = 0; i < cleanHex.length; i += 2) diffBytes.push(parseInt(cleanHex.substr(i, 2), 16));
+                }
+            }
+
+            let diffCount = 0;
+            const rows = tableBody.querySelectorAll('tr');
+            rows.forEach(row => {
+                if (!row.dataset.index) return;
+                const index = parseInt(row.dataset.index);
+                const binCell = row.querySelector(`[id^="td-bin-"]`);
+                
+                // Skip updating HTML if user is currently editing this cell
+                if (binCell.querySelector('input')) return;
+
+                if (index < diffBytes.length) {
+                    const byte1 = currentBytes[index];
+                    const byte2 = diffBytes[index];
+                    
+                    if (byte1 !== byte2) {
+                        diffCount++;
+                        row.classList.add('bg-red-900/20', 'diff-row');
+                        row.querySelector(`div[id^="td-bar"]`).className = 'bg-red-500 h-full transition-all duration-300';
+                        
+                        // Bit Diff HTML
+                        const diffMask = byte1 ^ byte2;
+                        let bitHtml = '';
+                        for (let b = 7; b >= 0; b--) {
+                            const isDiff = (diffMask >> b) & 1;
+                            const bit = (byte1 >> b) & 1;
+                            bitHtml += isDiff ? `<span class="bit-diff">${bit}</span>` : `<span class="text-yellow-500/80">${bit}</span>`;
+                            if (b === 4) bitHtml += ' ';
+                        }
+                        binCell.innerHTML = bitHtml;
+                    } else {
+                        row.classList.remove('bg-red-900/20', 'diff-row');
+                        const color = byte1===0?'bg-gray-700':'bg-blue-500';
+                        row.querySelector(`div[id^="td-bar"]`).className = `${color} h-full transition-all duration-300`;
+                        const binStr = byte1.toString(2).padStart(8,'0');
+                        binCell.innerHTML = `<span class="text-yellow-500/80 pointer-events-none">${binStr.slice(0,4)+' '+binStr.slice(4)}</span>`;
+                    }
+                } else {
+                    row.classList.remove('bg-red-900/20', 'diff-row');
+                    const binStr = currentBytes[index].toString(2).padStart(8,'0');
+                    binCell.innerHTML = `<span class="text-yellow-500/80 pointer-events-none">${binStr.slice(0,4)+' '+binStr.slice(4)}</span>`;
+                }
+            });
+
+            diffStats.innerText = `发现 ${diffCount} 处差异`;
+            diffStats.className = diffCount > 0 ? "text-xs bg-red-900 text-red-200 px-2 py-1 rounded" : "text-xs bg-green-900 text-green-200 px-2 py-1 rounded";
+            diffStats.classList.remove('hidden');
+        }
+
+        function checkRowDiff(index) {
+            // Helper to re-run full diff (simplest for now to ensure consistency)
+            runDiff(false);
+        }
+        function clearDiff() {
+            diffBytes = null;
+            diffStats.classList.add('hidden');
+            renderTable();
+        }
+
+        // --- Helpers ---
+        window.nav = function(e, index) {
+            if (e.key==='ArrowDown') { e.preventDefault(); const n=tableBody.children[index+1]; if(n) n.querySelector('input').focus(); }
+            if (e.key==='ArrowUp') { e.preventDefault(); const p=tableBody.children[index-1]; if(p) p.querySelector('input').focus(); }
+        }
+        function loadDemo() {
+            hexInput.value = "08 00 00 00 00 00 00 42 00 02";
+            fileInfo.classList.add('hidden');
+            parseAndSync('hex');
+            diffInput.value = "09 00 00 00 00 FF FF 42 00 03"; 
+            if (autoDiffCheck.checked) runDiff();
+        }
+        function clearAll() {
+            hexInput.value = ""; binaryInput.value = ""; diffInput.value = "";
+            currentBytes = []; diffBytes = null;
+            renderTable(); updateStats(); diffStats.classList.add('hidden');
+        }
+        function formatBinary() { updateBinaryInputDisplay(); }
+        function copyTableText() { navigator.clipboard.writeText("Feature not fully implemented in snippet").then(()=>alert("Copied")); }
+        function downloadBin() {
+            if(currentBytes.length===0) return alert("无数据");
+            const u8 = new Uint8Array(currentBytes);
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(new Blob([u8], {type: "application/octet-stream"}));
+            a.download = "data.bin"; a.click();
+        }
+
+        // Drag Drop (Simplified)
+        ['dragenter','dragover','dragleave','drop'].forEach(e=>dropZone.addEventListener(e,ev=>{ev.preventDefault();ev.stopPropagation();}));
+        dropZone.addEventListener('dragenter',()=>dragOverlay.classList.remove('hidden'));
+        dropZone.addEventListener('dragleave',e=>{if(e.relatedTarget && !dropZone.contains(e.relatedTarget)) dragOverlay.classList.add('hidden')});
+        dropZone.addEventListener('drop',e=>{
+            dragOverlay.classList.add('hidden');
+            const f = e.dataTransfer.files[0];
+            if(f) {
+                const r=new FileReader();
+                r.onload=ev=>{
+                    const u8=new Uint8Array(ev.target.result);
+                    let h=""; for(let i=0;i<Math.min(u8.length,10000);i++) h+=u8[i].toString(16).padStart(2,'0').toUpperCase()+" ";
+                    hexInput.value=h; fileInfo.innerText=f.name; fileInfo.classList.remove('hidden'); parseAndSync('hex');
+                }; r.readAsArrayBuffer(f);
+            }
+        });
+        
+        clearAll();
+    </script>
+</body>
+</html>
