@@ -61,7 +61,6 @@
                     <span class="hidden sm:inline">添加工具</span>
                 </button>
 
-                <!-- 重构的完美导入导出模块 -->
                 <div class="flex items-center gap-1 sm:gap-2 ml-1 sm:ml-2 pl-1 sm:pl-2 border-l border-slate-200">
                     <input type="file" id="importFileInput" accept=".json" class="hidden" onchange="handleImportFile(event)">
                     <button onclick="triggerImport()" class="text-slate-400 hover:text-indigo-600 transition-colors p-1.5 rounded-lg hover:bg-indigo-50" title="导入本地配置">
@@ -70,7 +69,6 @@
                     <button onclick="exportData()" class="text-slate-400 hover:text-indigo-600 transition-colors p-1.5 rounded-lg hover:bg-indigo-50" title="导出备份配置">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                     </button>
-                    <!-- 新增：重置本地缓存按钮 -->
                     <button onclick="resetWorkspace()" class="text-slate-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50" title="重置为出厂设置 (清除本地缓存)">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                     </button>
@@ -80,12 +78,10 @@
     </header>
 
     <div class="flex max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 gap-6 items-start relative">
-        <!-- Sidebar Navigation -->
         <aside class="sidebar-transition shrink-0 hidden md:flex flex-col sticky top-22 z-10 bg-white/60 backdrop-blur rounded-2xl border border-slate-200 shadow-sm overflow-hidden" id="sidebar-container" style="height: calc(100vh - 100px);">
             <!-- Rendered via JS -->
         </aside>
 
-        <!-- Main Content -->
         <main class="flex-1 min-w-0" id="app-container">
             <!-- Rendered via JS -->
         </main>
@@ -139,11 +135,18 @@
                         <p id="localFileStatus" class="text-xs font-medium text-emerald-600 mt-1 hidden">✅ 已缓存本地文件数据</p>
                     </div>
 
-                    <div>
+                    <div class="relative" id="customCategorySelectWrapper">
                         <label class="block text-sm font-medium text-slate-700 mb-1">所属分类</label>
-                        <select id="toolCategory" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
-                            <!-- Populated via JS -->
-                        </select>
+                        <input type="hidden" id="toolCategory" required>
+                        <button type="button" onclick="toggleCategoryDropdown(event)" class="w-full flex items-center justify-between px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white text-left shadow-sm transition-colors hover:bg-slate-50">
+                            <div id="categorySelectDisplay" class="flex items-center gap-2 text-slate-700 font-medium">
+                                <!-- JS填充 -->
+                            </div>
+                            <svg id="categorySelectIcon" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div id="categoryDropdownMenu" class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg hidden py-1 max-h-60 overflow-y-auto custom-scrollbar ring-1 ring-black ring-opacity-5">
+                            <!-- JS填充 -->
+                        </div>
                     </div>
                     
                     <div>
@@ -194,7 +197,7 @@
                         删除分类
                     </button>
                     <div class="flex gap-2 ml-auto">
-                        <button type="button" onclick="closeModal('catModal')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">取消</button>
+                        <button type="button" onclick="cancelCatModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">取消</button>
                         <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-sm transition-colors">保存</button>
                     </div>
                 </div>
@@ -260,8 +263,6 @@
         
         const PROTECTED_CATEGORIES = ['cat_remote', 'cat_my'];
 
-        // 💡 提示：如果你想让发布上去的工具对所有人可见，请在这里修改默认数据。
-        // ⚠️ 修复注意：默认数据里的 id 不要使用 Date.now()，请使用固定的英文字符符，如 't_hex'，以免造成渲染和拖拽的状态混乱。
         const defaultData = {
             sidebarCollapsed: false,
             categories: [
@@ -270,8 +271,7 @@
             ],
             tools: [
                 { id: 't_hex', name: '报文转hex', type: 'remote', url: './hex.html', desc: '转换报文为二进制', categoryId: 'cat_remote', isStar: false },
-                { id: 't_pridata', name: '私有数据解析', type: 'remote', url: './data.html', desc: '私有数据的设备列表解析', categoryId: 'cat_remote', isStar: false },
-                { id: 't_case', name: '测试用例生成', type: 'remote', url: 'https://kiwi-qa-tool.vercel.app/ ', desc: 'ai辅助生成测试用例', categoryId: 'cat_remote', isStar: false }
+                { id: 't_pridata', name: '私有数据解析', type: 'remote', url: './data.html', desc: '私有数据的设备列表解析', categoryId: 'cat_remote', isStar: false }
             ]
         };
 
@@ -315,7 +315,6 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         }
 
-        // 新增：重置本地缓存，读取最新出厂数据
         window.resetWorkspace = function() {
             showDialog({
                 title: '重置工作区',
@@ -390,7 +389,7 @@
                 const isProtected = PROTECTED_CATEGORIES.includes(cat.id);
                 html += `
                     <li data-cat-id="${cat.id}" class="group/sidelist relative rounded-lg hover:bg-indigo-50/50 transition-colors flex items-center">
-                        ${!isCol ? `<span class="category-drag-handle opacity-0 group-hover/sidelist:opacity-100 absolute left-2 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing z-10"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16"><path d="M7 2a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 5a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 8a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 11a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 14a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg></span>` : ''}
+                        ${!isCol ? `<span class="category-drag-handle opacity-0 group-hover/sidelist:opacity-100 absolute left-2 text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing z-10"><svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16"><path d="M7 2a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 5a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zM7 8a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg></span>` : ''}
                         
                         <a href="#cat-${cat.id}" class="flex items-center gap-3 py-2.5 w-full ${isCol ? 'justify-center px-0' : 'pl-7 pr-3'}" title="${escapeHTML(cat.name)}">
                             <span class="text-base shrink-0">${cat.icon}</span>
@@ -435,19 +434,19 @@
             return `
                 <div class="tool-card bg-white border border-slate-200 rounded-xl p-4 flex flex-col h-full relative group ${cursorClass}" data-tool-id="${tool.id}" onclick="handleCardClick(event, '${tool.id}')">
                     
-                    <button class="absolute top-4 right-4 z-10" onclick="toggleStar(event, '${tool.id}')">
+                    <button class="absolute top-4 right-4 z-10" onclick="toggleStar(event, '${tool.id}')" title="${tool.isStar ? '取消星标' : '设为星标'}">
                         <svg class="w-5 h-5 ${starClass} transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
                     </button>
 
                     <div class="flex items-center gap-2 mb-2 pr-6">
-                        <h3 class="font-semibold text-slate-800 text-base truncate">${escapeHTML(tool.name)}</h3>
+                        <h3 class="font-semibold text-slate-800 text-base truncate" title="${escapeHTML(tool.name)}">${escapeHTML(tool.name)}</h3>
                         ${badgeHtml}
                     </div>
                     
-                    <p class="text-sm text-slate-500 line-clamp-2 flex-1 mb-4">${escapeHTML(tool.desc || '暂无描述')}</p>
+                    <p class="text-sm text-slate-500 line-clamp-2 flex-1 mb-4" title="${escapeHTML(tool.desc || '暂无描述')}">${escapeHTML(tool.desc || '暂无描述')}</p>
                     
                     <div class="border-t border-slate-100 pt-3 flex justify-between items-center mt-auto">
-                        <span class="text-xs ${isLocal ? 'text-emerald-500' : 'text-slate-400 font-mono'} truncate max-w-[140px]">${urlDisplay}</span>
+                        <span class="text-xs ${isLocal ? 'text-emerald-500' : 'text-slate-400 font-mono'} truncate max-w-[140px]" title="${urlDisplay}">${urlDisplay}</span>
                         <div class="flex sm:hidden group-hover:flex gap-2 z-10">
                             <button onclick="editTool(event, '${tool.id}')" class="text-slate-400 hover:text-indigo-600 transition-colors" title="编辑">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
@@ -747,6 +746,21 @@
             document.getElementById('catModal').classList.remove('hidden');
         };
 
+        // 处理从工具添加弹窗进入的分类取消操作
+        window.cancelCatModal = function() {
+            closeModal('catModal');
+            if (window.isAddingCategoryFromTool) {
+                window.isAddingCategoryFromTool = false;
+                const prevId = window.previousSelectedCategoryId || 'cat_my';
+                const prevCat = state.categories.find(c => c.id === prevId);
+                if (prevCat) {
+                    document.getElementById('toolCategory').value = prevCat.id;
+                    document.getElementById('categorySelectDisplay').innerHTML = `<span>${prevCat.icon}</span> <span class="truncate">${escapeHTML(prevCat.name)}</span>`;
+                }
+                document.getElementById('toolModal').classList.remove('hidden');
+            }
+        };
+
         window.handleCatSubmit = function(e) {
             e.preventDefault();
             const id = document.getElementById('catId').value;
@@ -765,8 +779,22 @@
             }
 
             saveState();
-            closeModal('catModal');
-            render();
+            
+            if (window.isAddingCategoryFromTool) {
+                window.isAddingCategoryFromTool = false;
+                closeModal('catModal');
+                render();
+                
+                renderCategoryDropdown();
+                document.getElementById('toolCategory').value = newCat.id;
+                window.previousSelectedCategoryId = newCat.id;
+                document.getElementById('categorySelectDisplay').innerHTML = `<span>${newCat.icon}</span> <span class="truncate">${escapeHTML(newCat.name)}</span>`;
+                
+                document.getElementById('toolModal').classList.remove('hidden');
+            } else {
+                closeModal('catModal');
+                render();
+            }
         };
 
         window.editCategory = function(e, id) {
@@ -826,7 +854,6 @@
             const fileGroup = document.getElementById('fileInputGroup');
             const urlInput = document.getElementById('toolUrl');
             const fileInput = document.getElementById('toolFile');
-            const catSelect = document.getElementById('toolCategory');
 
             if (type === 'remote') {
                 urlGroup.classList.remove('hidden');
@@ -840,11 +867,6 @@
                 
                 const isEditing = !!document.getElementById('toolId').value;
                 fileInput.required = !isEditing && !currentFileContent;
-
-                if (!isEditing) {
-                    let myCat = state.categories.find(c => c.id === 'cat_my');
-                    if(myCat) catSelect.value = myCat.id;
-                }
             }
         };
 
@@ -875,14 +897,85 @@
             reader.readAsText(file);
         };
 
+        window.previousSelectedCategoryId = null;
+
+        window.toggleCategoryDropdown = function(e) {
+            if(e) e.stopPropagation();
+            const menu = document.getElementById('categoryDropdownMenu');
+            const icon = document.getElementById('categorySelectIcon');
+            menu.classList.toggle('hidden');
+            if (menu.classList.contains('hidden')) {
+                icon.classList.remove('rotate-180');
+            } else {
+                icon.classList.add('rotate-180');
+            }
+        };
+
+        document.addEventListener('click', function(e) {
+            const wrapper = document.getElementById('customCategorySelectWrapper');
+            const menu = document.getElementById('categoryDropdownMenu');
+            const icon = document.getElementById('categorySelectIcon');
+            if (wrapper && !wrapper.contains(e.target) && !menu.classList.contains('hidden')) {
+                menu.classList.add('hidden');
+                icon.classList.remove('rotate-180');
+            }
+        });
+
+        window.selectCategoryOption = function(id, name, iconHtml, isNewAction = false) {
+            if (isNewAction) {
+                toggleCategoryDropdown();
+                document.getElementById('toolModal').classList.add('hidden');
+                window.isAddingCategoryFromTool = true;
+                
+                document.getElementById('catModalTitle').innerText = '添加新分类';
+                document.getElementById('catForm').reset();
+                document.getElementById('catId').value = '';
+                document.getElementById('catIconInput').value = '🗂️';
+                
+                document.getElementById('catDeleteBtn').classList.add('hidden');
+                document.getElementById('catDeleteBtn').classList.remove('flex');
+                
+                const emojiBtns = document.querySelectorAll('.emoji-btn');
+                emojiBtns.forEach(btn => {
+                    btn.classList.remove('selected', 'bg-indigo-50', 'border-indigo-300');
+                    if(btn.innerText === '🗂️') btn.classList.add('selected', 'bg-indigo-50', 'border-indigo-300');
+                });
+                
+                document.getElementById('catModal').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('toolCategory').value = id;
+            window.previousSelectedCategoryId = id;
+            document.getElementById('categorySelectDisplay').innerHTML = `<span>${iconHtml}</span> <span class="truncate">${escapeHTML(name)}</span>`;
+            toggleCategoryDropdown();
+        };
+
+        window.renderCategoryDropdown = function() {
+            const menu = document.getElementById('categoryDropdownMenu');
+            let html = state.categories.map(c => `
+                <button type="button" onclick="selectCategoryOption('${c.id}', '${escapeHTML(c.name).replace(/'/g, "\\'")}', '${c.icon}')" class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left group">
+                    <span class="text-base">${c.icon}</span> 
+                    <span class="truncate font-medium group-hover:translate-x-0.5 transition-transform">${escapeHTML(c.name)}</span>
+                </button>
+            `).join('');
+
+            html += `<div class="h-px bg-slate-100 my-1 mx-3"></div>`;
+            html += `<button type="button" onclick="selectCategoryOption('', '', '', true)" class="w-full flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-colors text-left">
+                <svg class="w-4 h-4 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                新建分类...
+            </button>`;
+            
+            menu.innerHTML = html;
+        };
+
         window.openToolModal = function(tool = null) {
             if (state.categories.length === 0) {
                 showDialog({ type: 'alert', title: '无法操作', message: '请先在左侧目录创建一个分类！', icon: '📝' });
                 return;
             }
 
-            const select = document.getElementById('toolCategory');
-            select.innerHTML = state.categories.map(c => `<option value="${c.id}">${c.icon} ${escapeHTML(c.name)}</option>`).join('');
+            renderCategoryDropdown();
             
             currentFileContent = ''; 
             document.getElementById('localFileStatus').classList.add('hidden');
@@ -893,7 +986,11 @@
                 document.getElementById('toolId').value = tool.id;
                 document.getElementById('toolName').value = tool.name;
                 document.getElementById('toolDesc').value = tool.desc || '';
-                document.getElementById('toolCategory').value = tool.categoryId;
+                
+                const cat = state.categories.find(c => c.id === tool.categoryId) || state.categories[0];
+                document.getElementById('toolCategory').value = cat.id;
+                window.previousSelectedCategoryId = cat.id;
+                document.getElementById('categorySelectDisplay').innerHTML = `<span>${cat.icon}</span> <span class="truncate">${escapeHTML(cat.name)}</span>`;
 
                 if (tool.type === 'local') {
                     document.querySelector('input[name="toolType"][value="local"]').checked = true;
@@ -907,7 +1004,14 @@
                 document.getElementById('toolModalTitle').innerText = '添加新工具';
                 document.getElementById('toolForm').reset();
                 document.getElementById('toolId').value = '';
-                document.getElementById('toolCategory').value = state.categories[0].id;
+                
+                // 默认设定为“我的”分类
+                const myCat = state.categories.find(c => c.id === 'cat_my');
+                const defaultCat = myCat ? myCat : state.categories[0];
+                document.getElementById('toolCategory').value = defaultCat.id;
+                window.previousSelectedCategoryId = defaultCat.id;
+                document.getElementById('categorySelectDisplay').innerHTML = `<span>${defaultCat.icon}</span> <span class="truncate">${escapeHTML(defaultCat.name)}</span>`;
+                
                 document.querySelector('input[name="toolType"][value="remote"]').checked = true;
             }
             
@@ -921,14 +1025,16 @@
 
         window.handleToolSubmit = function(e) {
             e.preventDefault();
+            
             const id = document.getElementById('toolId').value;
             const type = document.querySelector('input[name="toolType"]:checked').value;
+            const catId = document.getElementById('toolCategory').value;
             
             const newTool = {
                 id: id || 't_' + Date.now(),
                 name: document.getElementById('toolName').value.trim(),
                 type: type,
-                categoryId: document.getElementById('toolCategory').value,
+                categoryId: catId,
                 desc: document.getElementById('toolDesc').value.trim(),
                 isStar: id ? state.tools.find(t => t.id === id).isStar : false
             };
